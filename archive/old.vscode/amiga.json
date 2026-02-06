@@ -1,0 +1,9 @@
+{
+    "includePath": [ "${workspaceFolder}/**" ],
+    "defines": [ ],
+    "shrinkler": {
+        "fast": "-h -o -1",
+        "slow": "-h -f dff180 -9"
+    },
+    "binPath": [ "/home/torkildl/.vscode/extensions/bartmanabyss.amiga-debug-1.7.9/bin/linux:/home/torkildl/.vscode/extensions/bartmanabyss.amiga-debug-1.7.9/bin/linux/fs-uae:${env:PATH}" ]
+}

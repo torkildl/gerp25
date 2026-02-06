@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "amiga-assembly",
+            "request": "launch",
+            "name": "FS-UAE Debug",
+            "stopOnEntry": false,
+            "program": "${workspaceFolder}/uae/dh0/demo",
+            "remoteProgram": "SYS:demo",
+            "emulatorType": "fs-uae",
+            "emulatorArgs": [
+                "--hard_drive_0=${workspaceFolder}/uae/dh0",
+                "--automatic_input_grab=0",
+                "--kickstart_file=/home/torkildl/amiga/kickstarts/kick13.rom"
+            ],
+            "preLaunchTask": "Make: build"
+        },
+        {   
+            "type": "vamiga",
+            "request": "launch",
+            "name": "vAmiga: OCS 512k + 512k Slow",
+            "program": "${workspaceFolder}/uae/dh0/demo",
+            "fastLoad": true,
+            "stopOnEntry": false,
+            "emulatorOptions": {
+                "kickstartRomPath": "/home/torkildl/amiga/kickstarts/kick13.rom",
+                "chipRam": "512k",
+                "slowRam": "512k",
+                "fastRam": "0",
+                "agnusRevision": "OCS",
+                "deniseRevision": "OCS",
+                "blitterAccuracy": 2,
+                "cpuRevision": "68000",
+                "cpuSpeed": "7MHz"
+            },
+            "preLaunchTask": "Make: build"
+        }
+    ]
+    }

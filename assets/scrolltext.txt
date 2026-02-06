@@ -1,0 +1,17 @@
+Dear all,
+
+Thank you for watching "Pastiche", Talent's contribution to GERP *2025*!
+
+The full credits:
+
+Main code by Scourger
+Serious graphics by Optic
+Funky vibes by Jukebox
+
+We also relied on some tools and code made available by others. The most 
+important are:
+
+setup/fw code : Gigabates/Desire
+LightSpeedPlayer: Leonard/Oxygene
+OCS image exporter : Soundy/Deadliners
+

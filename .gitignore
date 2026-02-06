@@ -1,0 +1,30 @@
+# build outputs
+*.o
+*.obj
+*.a
+*.lib
+*.bin
+*.exe
+*.elf
+*.map
+*.lst
+*.sym
+*.srec
+
+# disk images / packages
+*.adf
+*.adz
+*.dms
+*.lha
+*.zip
+
+# emulator / tooling state
+*.uae
+*.log
+*.sav
+
+# editor temp
+*~
+*.swp
+.DS_Store
+

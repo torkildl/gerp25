@@ -1,0 +1,15 @@
+*
+* Common timings and colors etc for the demo
+*
+*
+*
+WALLCUBE_ENDCOL = $fff
+GFXTWIST_BACKCOL = $424
+GFXTWIST_ENDCOL = $424
+CUBISM_STARTCOL = $423
+CUBISM_ENDCOL = $000
+ENDPART_STARTCOL = $777
+ENDPART_ENDCOL = $000
+
+
+

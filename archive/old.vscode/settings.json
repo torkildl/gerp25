@@ -1,0 +1,11 @@
+{
+    "m68k.includePaths": [
+        "/home/torkildl/.vscode/extensions/bartmanabyss.amiga-debug-1.7.7/bin/linux/opt/m68k-amiga-elf/sys-include"
+    ],
+    "m68k.vasm.provideDiagnostics": false,
+    "[m68k]": {
+        "editor.rulers": []
+    },
+    "editor.autoIndent": "none",
+    "makefile.validation.enable": false
+}
