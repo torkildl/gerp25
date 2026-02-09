@@ -37,7 +37,7 @@ OUT := $(OUT_DIR)/$(OUT_NAME)
 # vasm: generate Amiga hunk object and include line debug info
 VASMFLAGS ?= -m68000 -Fhunk -linedebug -w -quiet -Iinclude -Isrc
 # vlink: produce Amiga hunk executable
-VLINKFLAGS ?= -bamigahunk 
+VLINKFLAGS ?= -bamigahunk
 
 # -------- Targets --------
 .PHONY: build clean info

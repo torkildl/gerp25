@@ -5,7 +5,7 @@ CUBISM_BPLDEPTH = 4
 CUBISM_SCREEN_SIZE = CUBISM_BPLSIZE*CUBISM_BPLDEPTH
 CUBISM_DRAWBUFFER_SIZE = 192*CUBISM_BPLHEIGHT*2/8
 
-CUBISM_COPPER_SIZE = 1024
+CUBISM_COPPER_SIZE = 4096
 * Size of the basic cube drawing
 CUBISM_DRAWWIDTH = 192
 CUBISM_DRAWHEIGHT = 192
@@ -19,6 +19,8 @@ CUBISM_STARTLINE = $3fb7fffe					* plan is to start showing stuff at line $4c = 
 CUBISM_START_Y = $3f	
 CUBISM_SEGMENTHEIGHT = 32
 CUBISM_BACKCOL = $423
+HRIGHT = $c1
+HLEFT = $5f
 
 * Offset to current segment list
 CUBISM_SEG_ROUTINE = 0
@@ -35,8 +37,31 @@ CUBISM_ANIM_RESTART = 5
 
 CUBISM_SPIRAL_YSPD = 3
 
+CHESS_GRID_STEPS = 4
+CHESS_LINES_PER_FACE = (CHESS_GRID_STEPS+1)*2
+CHESS_LINES_PER_FRAME = CHESS_LINES_PER_FACE*6
+CHESS_LINE_WORDS = 4
+CHESS_FRAME_WORDS = 1+(CHESS_LINES_PER_FRAME*CHESS_LINE_WORDS)
+CHESS_FRAME_SIZE = CHESS_FRAME_WORDS*2
+CHESS_TOTAL_SIZE = CHESS_FRAME_SIZE*CUBE_FRAMES
+CHESS_DIST = 650
+CHESS_FOCAL = 256
+CHESS_CENTERX = 96
+CHESS_CENTERY = 96
+CHESS_MAXXY = 191
+
+* Spacecut polygon precalc
+SPACECUT_DEPTH = 0
+SPACECUT_MAX_POINTS = 6
+SPACECUT_FRAME_WORDS = 1+(SPACECUT_MAX_POINTS*2)
+SPACECUT_FRAME_SIZE = SPACECUT_FRAME_WORDS*2
+SPACECUT_TOTAL_SIZE = SPACECUT_FRAME_SIZE*CUBE_FRAMES
+SPACECUT_TMP_X0 = 2+(SPACECUT_MAX_POINTS*4)
+SPACECUT_TMP_Y0 = SPACECUT_TMP_X0+2
+SPACECUT_CLIP_MAX_POINTS = 8
+
 		incdir	"include"
-		include	"hw.i
+		include	"hw.i"
 		include	"hardware/blitbits.i"
 		include	"hardware/dmabits.i"
 		include	"hardware/intbits.i"
@@ -56,7 +81,6 @@ CUBISM_SPIRAL_YSPD = 3
 * 384x193x2/8 = front cube + extra lines for scrolling 
 * 384x192x2/8 = 
 *
-
 
 Cubism_Precalc:
 		jsr		MemFlip
@@ -95,23 +119,7 @@ Cubism_Precalc:
 		move.w	#$0086,(a1)+
 		move.w	d0,(a1)+
 
-		* frontbuffer bplptrs to frontcopper
-		swap	d2
-		move.l	#$00e00000,d0
-		move.w	d2,d0
-		rept	4
-		move.l	d0,(a0)+
-		add.l	#$00040000,d0
-		endr									4
-
-		* backbuffer bplptrs to backcopper
-		swap	d3
-		move.l	#$00e00000,d0
-		move.w	d3,d0
-		rept	4
-		move.l	d0,(a1)+
-		add.l	#$00040000,d0
-		endr									4
+		* frontbuffer/backbuffer bplptrs are set per-segment below
 
 		move.l	a0,d0
 		sub.l	a3,d0				* offset for segments in copperlist
@@ -123,25 +131,33 @@ y set CUBISM_START_Y
 			move.l	a0,d0
 			move.b	#y,(a0)+		* HRIGHT WAIT
 			move.b	#y,(a1)+
-			move.b	#$b5,(a0)+
-			move.b	#$b5,(a1)+
+			move.b	#HRIGHT,(a0)+
+			move.b	#HRIGHT,(a1)+
 			move.w	#$fffe,(a0)+
 			move.w	#$fffe,(a1)+
-			* set bplptrs for 4 bpls
+			move.l	#$01800000,(a0)+
+			move.l	#$01800000,(a1)+
+			* set bplptrs for 4 bpls (high + low words)
 			move.l	#$01002200,(a0)+
 			move.l	#$01002200,(a1)+
 			move.l	#$01020000,(a0)+
 			move.l	#$01020000,(a1)+
+			move.l	#$00e00000,(a0)+
+			move.l	#$00e00000,(a1)+
 			move.l	#$00e20000,(a0)+
 			move.l	#$00e20000,(a1)+
+			move.l	#$00e40000,(a0)+
+			move.l	#$00e40000,(a1)+
 			move.l	#$00e60000,(a0)+
 			move.l	#$00e60000,(a1)+
+			move.l	#$00e80000,(a0)+
+			move.l	#$00e80000,(a1)+
 			move.l	#$00ea0000,(a0)+
 			move.l	#$00ea0000,(a1)+
+			move.l	#$00ec0000,(a0)+
+			move.l	#$00ec0000,(a1)+
 			move.l	#$00ee0000,(a0)+
 			move.l	#$00ee0000,(a1)+
-			move.l	#$01800000+CUBISM_BACKCOL,(a0)+
-			move.l	#$01800000+CUBISM_BACKCOL,(a1)+
 col set $182
 			rept	15
 				move.w 	#col,(a0)+
@@ -153,30 +169,38 @@ col set col+2
 y set y+1
 			move.b	#y,(a0)+		* HRIGHT WAIT
 			move.b	#y,(a1)+
-			move.b	#$8f,(a0)+			* HLEFT wait
-			move.b	#$8f,(a1)+
+			move.b	#HLEFT,(a0)+			* HLEFT wait
+			move.b	#HLEFT,(a1)+
 			move.w	#$fffe,(a0)+
 			move.w	#$fffe,(a1)+
+			move.l	#$01800000+CUBISM_BACKCOL,(a0)+
+			move.l	#$01800000+CUBISM_BACKCOL,(a1)+
 
 			rept	31
 			move.b	#y,(a0)+		* HRIGHT WAIT
 			move.b	#y,(a1)+
-			move.b	#$b5,(a0)+
-			move.b	#$b5,(a1)+
+			move.b	#HRIGHT,(a0)+
+			move.b	#HRIGHT,(a1)+
 			move.w	#$fffe,(a0)+
 			move.w	#$fffe,(a1)+
+			move.l	#$01800000,(a0)+
+			move.l	#$01800000,(a1)+
 y set y+1
 			move.b	#y,(a0)+		* HRIGHT WAIT
 			move.b	#y,(a1)+
-			move.b	#$8f,(a0)+			* HLEFT wait
-			move.b	#$8f,(a1)+
+			move.b	#HLEFT,(a0)+			* HLEFT wait
+			move.b	#HLEFT,(a1)+
 			move.w	#$fffe,(a0)+
 			move.w	#$fffe,(a1)+
+			move.l	#$01800000+CUBISM_BACKCOL,(a0)+
+			move.l	#$01800000+CUBISM_BACKCOL,(a1)+
 			endr
 			move.l 	a0,d1
 		endr
 		sub.l	d0,d1
 		move.l	d1,cubism_copseglen(a5)
+		move.l	#$01000200,(a0)+
+		move.l	#$01000200,(a1)+
 		* end copperlists
 		move.l	#-2,(a0)
 		move.l	#-2,(a1)
@@ -188,19 +212,22 @@ y set y+1
 	
 		bsr		cubism_initanimation
 		bsr		cubism_preparenoise
+		*		bsr		cubism_precalc_spacecut
+		*bsr		cubism_precalc_chesslines
 		rts
 
 Cubism_Effect:
 		jsr		SetBgTask
 		jsr		MemFreeLast						* free memory reserved be previous effect (in the other mem direction)
 
+		move.l	cubism_vars,a5
 		move.l	cubism_frontbuffer(a5),a0
 		WAIT_BLIT
 		move.l	#$01000000,bltcon0(a6)
 		move.l	a0,bltdpt(a6)
 		clr.w	bltdmod(a6)
 		move.l	#-1,bltafwm(a6)
-		move.w	#(CUBISM_BPLHEIGHT*3*64)+(CUBISM_BPLWIDTH/16),bltsize(a6)
+		move.w	#(CUBISM_BPLHEIGHT*2*64)+(CUBISM_BPLWIDTH/16),bltsize(a6)
 
 		move.l	cubism_backbuffer(a5),a0
 		WAIT_BLIT
@@ -208,7 +235,7 @@ Cubism_Effect:
 		move.l	a0,bltdpt(a6)
 		clr.w	bltdmod(a6)
 		move.l	#-1,bltafwm(a6)
-		move.w	#(CUBISM_BPLHEIGHT*3*64)+(CUBISM_BPLWIDTH/16),bltsize(a6)
+		move.w	#(CUBISM_BPLHEIGHT*2*64)+(CUBISM_BPLWIDTH/16),bltsize(a6)
 		WAIT_BLIT
 
 		lea.l	Script,a0
@@ -258,7 +285,7 @@ cubism_updateframe:
 		add.l	cubism_coppreamble(a5),a0
 
 		move.l	#CUBISM_STARTLINE,d0			* current segment's vertical position
-		moveq	#0,d1							* lets start at the top of the bitplane
+		move.l	cubism_backbuffer(a5),d1		* here's the 
 		lea.l	cubism_current_segments,a1		* list of segment types
 
 		rept	6
@@ -385,50 +412,53 @@ cubism_newdraw:
 		move.w	d0,bltamod(a6)					* set modulo
 		move.w	d1,bltdmod(a6)					* set modulo
 		move.w	#(CUBISM_DRAWHEIGHT*2*64)+(CUBISM_DRAWWIDTH/16),bltsize(a6)
-
-
 		rts
 
 
-
-
-* produce noise segment: input d0 = current screen vpos,d1 = segment screen address,d2 = offsets for bplptr/bplcon1,a0 = copperlist,a1 = segment list
 cubism_emptysegment:
-		bra		cubism_blenksegment
-		move.l	#$01000200,(a0)+				* set number of bitplanes from start
-		move.l	#$01800000+CUBISM_BACKCOL,(a0)+	* set background color
+		move.w	#$0200,10(a0)			* turn off the segment
 		rts
 
 cubism_glenzsegment:
-		bra		cubism_blenksegment
 		* d1 = current bplptr for first bitplane
-		move.l	#$01002200,(a0)+				* set number of bitplanes from start
-		move.w	#$0102,(a0)+					* set scroll register
-		move.w	d2,(a0)+						* ... to value supplied in d2
+		move.w	#$4200,10(a0)					* after wait, col0, and $0100 (4 bpls)
+		move.w	d2,14(a0)						* bplcon1
 
-		add.w	d1,d5							* add screen address to d5:  now d5 contains screen address _and_ byteoffset for segment
-		move.w	#$00e2,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
-		add.w	#CUBISM_BPLSIZE,d5
-		move.w	#$00e6,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
+		move.w	d5,d6
+		ext.l	d6
+		add.l	d1,d6							* d6 = full address for plane 1
+		move.w	d6,22(a0)						* low word
+		swap	d6
+		move.w	d6,18(a0)						* high word
+		swap	d6
+		add.l	#CUBISM_BPLSIZE,d6				* plane 2
+		move.w	d6,30(a0)						* low word
+		swap	d6
+		move.w	d6,26(a0)						* high word
+		swap	d6
+		add.l	#CUBISM_BPLSIZE,d6				* plane 3
+		move.w	d6,38(a0)						* low word
+		swap	d6
+		move.w	d6,34(a0)						* high word
+		swap	d6
+		add.l	#CUBISM_BPLSIZE,d6				* plane 4
+		move.w	d6,46(a0)						* low word
+		swap	d6
+		move.w	d6,42(a0)						* high word
+		swap	d6
 
-		move.l	#$01800000+CUBISM_BACKCOL,(a0)+	* set background color
 		move.l	FrontBackThisFrame,a4
 		lea.l	2(a4),a4
-		move.l	cubism_blenkpalette,a5
+		move.l	cubism_glenzpalette,a5
 
-		move.w	#$182,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
+		move.w	(a5,d4.w),50(a0)
 
-		move.w	#$184,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
+		move.w	(a5,d4.w),54(a0)
 
-		move.w	#$186,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
+		move.w	(a5,d4.w),58(a0)
 		rts
 
 		swap	d2								* get bplptr byteoffset down to lower bits
@@ -553,17 +583,25 @@ cubism_grey_blenksegment:
 * BLENK VECTOR: requires screen address in d1,copperlist address in a0. kills d4-d6
 * scroll in d2
 *
-* Segment structure: WAIT (4), BPLCON0, BPLCON1, BPLPTR1-4, COL0, COL1-5
+* Segment structure: WAIT (4), COL0, BPLCON0, BPLCON1, BPLPTR1-4, COL0, COL1-15
 * 4 bytes per instruction
 cubism_blenksegment:
 		* d1 = current bplptr for first bitplane
 		* a0 = start of copper segment
-		move.w	#$2200,6(a0)					* after wait and $0100
-		move.w	d2,10(a0)						* bplcon1
-		add.w	d1,d5							* add screen address to d5:  now d5 contains screen address _and_ byteoffset for segment
-		move.w	d5,14(a0)
-		add.w	#CUBISM_BPLSIZE,d5
-		move.w	d5,18(a0)
+		move.w	#$2200,10(a0)					* after wait, col0, and $0100
+		move.w	d2,14(a0)						* bplcon1
+		move.w	d5,d6
+		ext.l	d6
+		add.l	d1,d6							* d6 = full address for plane 1
+		move.w	d6,22(a0)						* low word
+		swap	d6
+		move.w	d6,18(a0)						* high word
+		swap	d6
+		add.l	#CUBISM_BPLSIZE,d6				* plane 2
+		move.w	d6,30(a0)						* low word
+		swap	d6
+		move.w	d6,26(a0)						* high word
+		swap	d6
 
 		move.l	FrontBackThisFrame,a4
 		lea.l	2(a4),a4
@@ -571,152 +609,140 @@ cubism_blenksegment:
 
 		*move.w	#$182,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),34(a0)
+		move.w	(a5,d4.w),50(a0)
 
 		*move.w	#$184,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),38(a0)
+		move.w	(a5,d4.w),54(a0)
 
 		*move.w	#$186,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),42(a0)
+		move.w	(a5,d4.w),58(a0)
 		rts
 
-cubism_codersegment:
-		bra cubism_blenksegment
-		* d1 = current bplptr for first bitplane
-		move.l	#$01002200,(a0)+				* set number of bitplanes from start
-		move.w	#$0102,(a0)+					* set scroll register
-		move.w	d2,(a0)+						* ... to value supplied in d2
-
-		add.w	d1,d5							* add screen address to d5:  now d5 contains screen address _and_ byteoffset for segment
-		move.w	#$00e2,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
-		add.w	#CUBISM_BPLSIZE,d5
-		move.w	#$00e6,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
+	cubism_codersegment:
+		move.w	#$2200,10(a0)					* after wait, col0, and $0100
+		move.w	d2,14(a0)						* bplcon1
+		move.w	d5,d6
+		ext.l	d6
+		add.l	d1,d6							* d6 = full address for plane 1
+		move.w	d6,22(a0)						* low word
+		swap	d6
+		move.w	d6,18(a0)						* high word
+		swap	d6
+		add.l	#CUBISM_BPLSIZE,d6				* plane 2
+		move.w	d6,30(a0)						* low word
+		swap	d6
+		move.w	d6,26(a0)						* high word
+		swap	d6
 
 		move.l	FrontBackThisFrame,a4
 		lea.l	2(a4),a4
 
-		move.l	#$01800000+CUBISM_BACKCOL,(a0)+	* set background color
 		move.l	#cubism_pal_red,a5
-		move.w	#$182,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
+		move.w	(a5,d4.w),50(a0)
 
 		move.l	#cubism_pal_green,a5
-		move.w	#$184,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
+		move.w	(a5,d4.w),54(a0)
 
 		move.l	#cubism_pal_blue,a5
-		move.w	#$186,(a0)+
 		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
+		move.w	(a5,d4.w),58(a0)
 		rts
 
 
-cubism_spiralsegment:
-		bra cubism_spiralsegment
-		* d1 = current bplptr for first bitplane
-		move.l	#$01003200,(a0)+				* set number of bitplanes from start
-		move.w	#$0102,(a0)+					* set scroll register
-		move.w	d2,(a0)+						* ... to value supplied in d2
+	cubism_spiralsegment:
+		move.w	#$3200,10(a0)					* after wait, col0, and $0100
+		move.w	d2,14(a0)						* bplcon1
+		move.w	d5,d6
+		ext.l	d6
+		add.l	d1,d6							* d6 = full address for plane 1
+		move.w	d6,22(a0)						* low word
+		swap	d6
+		move.w	d6,18(a0)						* high word
+		swap	d6
+		add.l	#CUBISM_BPLSIZE,d6				* plane 2
+		move.w	d6,30(a0)						* low word
+		swap	d6
+		move.w	d6,26(a0)						* high word
+		swap	d6
 
-		add.w	d1,d5							* add screen address to d5:  now d5 contains screen address _and_ byteoffset for segment
-		move.w	#$00e2,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
-		add.w	#CUBISM_BPLSIZE,d5
-		move.w	#$00e6,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
-
-		move.l	cubism_spiralptr,d4				* address to pattern-screen area (animated later)
-		move.w	#$00e8,(a0)+					* set high word bplptr code for spiral
-		swap	d4
-		move.w	d4,(a0)+
-		swap	d4
-		move.w	#$00ea,(a0)+
-		move.w	d4,(a0)+						* set lower word of bplptr for spiral
+		move.l	cubism_spiralptr,d6				* plane 3 uses spiral buffer
+		move.w	d6,38(a0)						* low word
+		swap	d6
+		move.w	d6,34(a0)						* high word
+		swap	d6
 
 		move.l	FrontBackThisFrame,a4
 		lea.l	2(a4),a4
-		move.l	cubism_spiralpalette,a5
 
-		move.l	#$01800000+CUBISM_BACKCOL,(a0)+	* set background color
-		move.l	#$01880000+CUBISM_BACKCOL,(a0)+	* color always black if not noise on top
+		move.l	#cubism_pal_green,a5
+		move.w	(a4),d4							* color id
+		move.w	(a5,d4.w),50(a0)				* color 1
+		move.w	2(a4),d4
+		move.w	(a5,d4.w),54(a0)				* color 2
+		move.w	4(a4),d4
+		move.w	(a5,d4.w),58(a0)				* color 3
 
-		move.l	#cubism_pal_peach,a5
-		move.w	#$182,(a0)+
-		move.w	(a4),d4							* color id 1
-		move.w	(a5,d4.w),(a0)+
-		move.w	#$184,(a0)+
-		move.w	2(a4),d4						* color id 2
-		move.w	(a5,d4.w),(a0)+
-		move.w	#$186,(a0)+
-		move.w	4(a4),d4						* color id 3
-		move.w	(a5,d4.w),(a0)+
+		move.w	#CUBISM_BACKCOL,62(a0)			* color 4 (stencil only)
 
 		move.l	#cubism_pal_granny,a5
-		move.w	#$18a,(a0)+
-		move.w	(a4),d4							* color id 1
-		move.w	(a5,d4.w),(a0)+
-		move.w	#$18c,(a0)+
-		move.w	2(a4),d4						* color id 2
-		move.w	(a5,d4.w),(a0)+
-		move.w	#$18e,(a0)+
-		move.w	4(a4),d4						* color id 3
-		move.w	(a5,d4.w),(a0)+
+		move.w	(a4),d4
+		move.w	(a5,d4.w),66(a0)				* color 5
+		move.w	2(a4),d4
+		move.w	(a5,d4.w),70(a0)				* color 6
+		move.w	4(a4),d4
+		move.w	(a5,d4.w),74(a0)				* color 7
 		rts
 
-cubism_noisesegment:
-		bra cubism_blenksegment
-		* d1 = current bplptr for first bitplane
-		move.l	#$01003200,(a0)+				* set number of bitplanes from start
-		move.w	#$0102,(a0)+					* set scroll register
-		move.w	d2,(a0)+						* ... to value supplied in d2
 
-		add.w	d1,d5							* add screen address to d5:  now d5 contains screen address _and_ byteoffset for segment
-		move.w	#$00e2,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
-		add.w	#CUBISM_BPLSIZE,d5
-		move.w	#$00e6,(a0)+					* first bplptr code
-		move.w	d5,(a0)+
+cubism_noisesegment:
+		* d1 = current bplptr for first bitplane
+		move.w	#$3200,10(a0)					* after wait, col0, and $0100
+		move.w	d2,14(a0)						* bplcon1
+		move.w	d5,d6
+		ext.l	d6
+		add.l	d1,d6							* d6 = full address for plane 1
+		move.w	d6,22(a0)						* low word
+		swap	d6
+		move.w	d6,18(a0)						* high word
+		swap	d6
+		add.l	#CUBISM_BPLSIZE,d6				* plane 2
+		move.w	d6,30(a0)						* low word
+		swap	d6
+		move.w	d6,26(a0)						* high word
+		swap	d6
 
 		move.l	cubism_vars,a5
-		move.l	d0,d6							* save as the Random32 
+		move.l	d0,d7							* save d0
 		jsr		Random32
 		and.l	#$3ff,d0
 		add.l	cubism_noiseptr(a5),d0			* switch noise buffers
-		move.w	#$00ea,(a0)+
-		move.w	d0,(a0)+
-		swap	d0
-		move.w	#$00e8,(a0)+
-		move.w	d0,(a0)+
-		move.l	d6,d0							* restore d0
+		move.l	d0,d6							* plane 3 pointer
+		move.l	d7,d0							* restore d0
+
+		move.w	d6,38(a0)						* low word
+		swap	d6
+		move.w	d6,34(a0)						* high word
+		swap	d6
 
 		move.l	FrontBackThisFrame,a4
 		lea.l	2(a4),a4
+
+		move.w	#0,50(a0)						* color 1
+		move.w	#0,54(a0)						* color 2
+		move.w	#0,58(a0)						* color 3
+		move.w	#CUBISM_BACKCOL,62(a0)			* color 4 (stencil only)
+
 		move.l	cubism_noisepalette,a5
-
-		move.l	#$01800000+CUBISM_BACKCOL,(a0)+	* set background color
-		move.l	#$01820000,(a0)+				* color always black if not noise on top
-		move.l	#$01840000,(a0)+				* color always black if not noise on top
-		move.l	#$01860000,(a0)+				* color always black if not noise on top
-		move.l	#$01880000+CUBISM_BACKCOL,(a0)+	* color always black if not noise on top
-
-		move.w	#$18a,(a0)+
-		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
-
-		move.w	#$18c,(a0)+
-		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
-
-		move.w	#$18e,(a0)+
-		move.w	(a4)+,d4						* color id
-		move.w	(a5,d4.w),(a0)+
-
+		move.w	(a4),d4
+		move.w	(a5,d4.w),66(a0)				* color 5
+		move.w	2(a4),d4
+		move.w	(a5,d4.w),70(a0)				* color 6
+		move.w	4(a4),d4
+		move.w	(a5,d4.w),74(a0)				* color 7
 		rts
 
 
@@ -934,6 +960,863 @@ cubism_preparenoise:
 		move.l	d0,(a0)+
 		dbf		d7,.makenoise
 		rts
+
+cubism_precalc_chesslines:
+		move.l	cubism_vars,a5
+		ALLOC_PUBLIC CHESS_TOTAL_SIZE,cubism_chesslines(a5)
+		move.l	cubism_chesslines(a5),a0		* base write ptr
+
+		moveq	#0,d7							* frame index
+.frame_loop
+		move.l	a0,a1							* frame start
+		addq.l	#2,a0							* reserve space for count
+		move.w	#0,(a1)							* line count
+
+		lea.l	RotatedCubePoints3d,a2
+		move.w	d7,d0
+		mulu	#48,d0							* 8 vertices * 3 words * 2 bytes
+		adda.l	d0,a2							* a2 = 3d points for frame
+
+		lea.l	FrontBackColor,a3
+		move.w	d7,d0
+		mulu	#8,d0
+		adda.l	d0,a3							* a3 = visibility for frame
+
+		moveq	#0,d5							* face index
+.face_loop
+		btst	d5,1(a3)
+		beq		.next_face
+
+		lea.l	CubeFaces,a4
+		move.w	d5,d0
+		mulu	#18,d0							* 9 words per face
+		adda.l	d0,a4
+
+		* v1 coords
+		move.w	2(a4),d0						* v1
+		mulu	#6,d0
+		lea.l	(a2,d0.w),a6
+		move.w	(a6),d0							* v1x
+		move.w	2(a6),d1						* v1y
+		move.w	4(a6),d2						* v1z
+
+		* v2 coords
+		move.w	4(a4),d3						* v2
+		mulu	#6,d3
+		lea.l	(a2,d3.w),a6
+		move.w	(a6),d3							* v2x
+		move.w	2(a6),d4						* v2y
+		move.w	4(a6),d5						* v2z
+
+		* du = v2 - v1
+		sub.w	d0,d3							* dux
+		sub.w	d1,d4							* duy
+		sub.w	d2,d5							* duz
+
+		* store v1 and du on stack (6 words)
+		suba.l	#18,sp
+		move.w	d0,0(sp)						* v1x
+		move.w	d1,2(sp)						* v1y
+		move.w	d2,4(sp)						* v1z
+		move.w	d3,6(sp)						* dux
+		move.w	d4,8(sp)						* duy
+		move.w	d5,10(sp)						* duz
+
+		* v4 coords
+		move.w	12(a4),d6						* v4
+		mulu	#6,d6
+		lea.l	(a2,d6.w),a6
+		move.w	(a6),d6							* v4x
+		move.w	2(a6),d4						* v4y
+		move.w	4(a6),d5						* v4z (reuse d5)
+
+		* dv = v4 - v1
+		sub.w	d0,d6							* dvx
+		sub.w	d1,d4							* dvy
+		sub.w	d2,d5							* dvz
+		move.w	d6,12(sp)						* dvx
+		move.w	d4,14(sp)						* dvy
+		move.w	d5,16(sp)						* dvz
+
+		* u-lines (5)
+		moveq	#0,d3							* i = 0..4
+.uline_loop
+		move.w	6(sp),d0						* dux
+		ext.l	d0
+		muls	d3,d0
+		asr.l	#2,d0
+		add.w	0(sp),d0						* x0
+
+		move.w	8(sp),d1						* duy
+		ext.l	d1
+		muls	d3,d1
+		asr.l	#2,d1
+		add.w	2(sp),d1						* y0
+
+		move.w	10(sp),d2						* duz
+		ext.l	d2
+		muls	d3,d2
+		asr.l	#2,d2
+		add.w	4(sp),d2						* z0
+
+		move.w	d0,d4
+		add.w	12(sp),d4						* x1
+		move.w	d1,d5
+		add.w	14(sp),d5						* y1
+		move.w	d2,d6
+		add.w	16(sp),d6						* z1
+
+		move.w	d4,-(sp)						* save x1
+		move.w	d5,-(sp)						* save y1
+		move.w	d6,-(sp)						* save z1
+		bsr		chess_project_point
+		move.w	(sp)+,d6						* restore z1
+		move.w	(sp)+,d5						* restore y1
+		move.w	(sp)+,d4						* restore x1
+		move.w	d0,-(sp)						* save x0
+		move.w	d1,-(sp)						* save y0
+		move.w	d4,d0
+		move.w	d5,d1
+		move.w	d6,d2
+		bsr		chess_project_point
+		move.w	(sp)+,d2						* y0
+		move.w	(sp)+,d3						* x0
+		move.w	d0,d4							* x1
+		move.w	d1,d5							* y1
+
+		move.w	d3,d0
+		move.w	d4,d1
+		tst.w	d0
+		bpl.s	.xu_notneg
+		tst.w	d1
+		bmi.s	.u_skip
+.xu_notneg
+		cmp.w	#CHESS_MAXXY,d0
+		ble.s	.xu_ok
+		cmp.w	#CHESS_MAXXY,d1
+		bgt.s	.u_skip
+.xu_ok
+		move.w	d2,d0
+		move.w	d5,d1
+		tst.w	d0
+		bpl.s	.yu_notneg
+		tst.w	d1
+		bmi.s	.u_skip
+.yu_notneg
+		cmp.w	#CHESS_MAXXY,d0
+		ble.s	.yu_ok
+		cmp.w	#CHESS_MAXXY,d1
+		bgt.s	.u_skip
+.yu_ok
+		move.w	d3,(a0)+						* x0
+		move.w	d2,(a0)+						* y0
+		move.w	d4,(a0)+						* x1
+		move.w	d5,(a0)+						* y1
+		addq.w	#1,(a1)
+.u_skip
+		addq.w	#1,d3
+		cmp.w	#5,d3
+		blt	.uline_loop
+
+		* v-lines (5)
+		moveq	#0,d3							* i = 0..4
+.vline_loop
+		move.w	12(sp),d0						* dvx
+		ext.l	d0
+		muls	d3,d0
+		asr.l	#2,d0
+		add.w	0(sp),d0						* x0
+
+		move.w	14(sp),d1						* dvy
+		ext.l	d1
+		muls	d3,d1
+		asr.l	#2,d1
+		add.w	2(sp),d1						* y0
+
+		move.w	16(sp),d2						* dvz
+		ext.l	d2
+		muls	d3,d2
+		asr.l	#2,d2
+		add.w	4(sp),d2						* z0
+
+		move.w	d0,d4
+		add.w	6(sp),d4						* x1
+		move.w	d1,d5
+		add.w	8(sp),d5						* y1
+		move.w	d2,d6
+		add.w	10(sp),d6						* z1
+
+		move.w	d4,-(sp)						* save x1
+		move.w	d5,-(sp)						* save y1
+		move.w	d6,-(sp)						* save z1
+		bsr		chess_project_point
+		move.w	(sp)+,d6						* restore z1
+		move.w	(sp)+,d5						* restore y1
+		move.w	(sp)+,d4						* restore x1
+		move.w	d0,-(sp)						* save x0
+		move.w	d1,-(sp)						* save y0
+		move.w	d4,d0
+		move.w	d5,d1
+		move.w	d6,d2
+		bsr		chess_project_point
+		move.w	(sp)+,d2						* y0
+		move.w	(sp)+,d3						* x0
+		move.w	d0,d4							* x1
+		move.w	d1,d5							* y1
+
+		move.w	d3,d0
+		move.w	d4,d1
+		tst.w	d0
+		bpl.s	.xv_notneg
+		tst.w	d1
+		bmi.s	.v_skip
+.xv_notneg
+		cmp.w	#CHESS_MAXXY,d0
+		ble.s	.xv_ok
+		cmp.w	#CHESS_MAXXY,d1
+		bgt.s	.v_skip
+.xv_ok
+		move.w	d2,d0
+		move.w	d5,d1
+		tst.w	d0
+		bpl.s	.yv_notneg
+		tst.w	d1
+		bmi.s	.v_skip
+.yv_notneg
+		cmp.w	#CHESS_MAXXY,d0
+		ble.s	.yv_ok
+		cmp.w	#CHESS_MAXXY,d1
+		bgt.s	.v_skip
+.yv_ok
+		move.w	d3,(a0)+						* x0
+		move.w	d2,(a0)+						* y0
+		move.w	d4,(a0)+						* x1
+		move.w	d5,(a0)+						* y1
+		addq.w	#1,(a1)
+.v_skip
+		addq.w	#1,d3
+		cmp.w	#5,d3
+		blt		.vline_loop
+
+		adda.l	#18,sp
+.next_face
+		addq.w	#1,d5
+		cmp.w	#6,d5
+		blt		.face_loop
+
+		add.l	#CHESS_FRAME_SIZE,a1
+		move.l	a1,a0
+
+		addq.w	#1,d7
+		cmp.w	#CUBE_FRAMES,d7
+		blt		.frame_loop
+		rts
+
+cubism_precalc_spacecut:
+		move.l	cubism_vars,a5
+		ALLOC_PUBLIC SPACECUT_TOTAL_SIZE,cubism_spacecutpoly(a5)
+		move.l	cubism_spacecutpoly(a5),a0		* base write ptr
+
+		moveq	#0,d7							* frame index
+.frame_loop
+		move.l	a0,a1							* frame start
+		addq.l	#2,a0							* reserve space for count
+		move.w	#0,(a1)							* point count
+
+		lea.l	RotatedCubePoints3d,a2
+		move.w	d7,d0
+		mulu	#48,d0							* 8 vertices * 3 words * 2 bytes
+		adda.l	d0,a2							* a2 = 3d points for frame
+
+		* temp buffer on stack: count + points (x,y)
+		suba.l	#40,sp
+		move.l	sp,a3							* a3 = base
+		move.w	d7,(a3)							* save frame index
+		lea.l	2(a3),a3						* a3 = count
+		clr.w	(a3)							* count = 0
+		lea.l	2(a3),a4						* a4 = write ptr
+
+		lea.l	SpacecutEdges,a6
+		moveq	#12-1,d6
+.edge_loop
+		move.w	(a6)+,d0						* v0 index
+		move.w	(a6)+,d3						* v1 index
+
+		move.w	d0,d2
+		mulu	#6,d2
+		lea.l	(a2,d2.w),a5
+		move.w	(a5),d0							* x0
+		move.w	2(a5),d1						* y0
+		move.w	4(a5),d2						* z0
+		move.w	d0,SPACECUT_TMP_X0(a3)			* save x0
+		move.w	d1,SPACECUT_TMP_Y0(a3)			* save y0
+
+		move.w	d3,d4
+		mulu	#6,d4
+		lea.l	(a2,d4.w),a5
+		move.w	(a5),d3							* x1
+		move.w	2(a5),d4						* y1
+		move.w	4(a5),d5						* z1
+
+		* if z0 == depth, add v0
+		cmp.w	#SPACECUT_DEPTH,d2
+		bne.s	.check_z1
+		bsr		spacecut_add_point
+.check_z1
+		* if z1 == depth, add v1
+		cmp.w	#SPACECUT_DEPTH,d5
+		bne.s	.check_cross
+		move.w	d3,d0							* x
+		move.w	d4,d1							* y
+		bsr		spacecut_add_point
+
+.check_cross
+		move.w	d2,d7
+		sub.w	#SPACECUT_DEPTH,d7				* z0 - depth
+		move.w	d5,d5
+		sub.w	#SPACECUT_DEPTH,d5				* z1 - depth
+		muls	d5,d7
+		bpl.s	.edge_done						* same side or on plane
+
+		* interpolate intersection point (8.8 fixed t)
+		move.w	d5,d7
+		add.w	#SPACECUT_DEPTH,d7				* z1
+		sub.w	d2,d7							* dz = z1 - z0
+		beq.s	.edge_done
+		move.w	d2,d5
+		sub.w	#SPACECUT_DEPTH,d5				* z0 - depth
+		neg.w	d5								* depth - z0
+		ext.l	d5
+		asl.l	#8,d5							* 8.8 fixed
+		divs	d7,d5							* t in d5.w
+
+		move.w	SPACECUT_TMP_X0(a3),d0			* x0
+		move.w	SPACECUT_TMP_Y0(a3),d1			* y0
+		move.w	d3,d7
+		sub.w	d0,d7							* dx = x1 - x0
+		move.w	d4,d2
+		sub.w	d1,d2							* dy = y1 - y0
+
+		move.w	d7,d3
+		muls	d5,d3
+		asr.l	#8,d3
+		add.w	d3,d0							* x = x0 + dx*t
+
+		move.w	d2,d3
+		muls	d5,d3
+		asr.l	#8,d3
+		add.w	d3,d1							* y = y0 + dy*t
+
+		bsr		spacecut_add_point
+
+.edge_done
+		dbf		d6,.edge_loop
+
+		* sort points around center in world x/y (z is constant)
+		bsr		spacecut_sort_points
+
+		* write projected polygon to output
+		move.w	(a3),d6							* count
+		cmp.w	#3,d6
+		blt.s	.no_poly
+
+		move.w	d6,(a1)
+		lea.l	2(a3),a4
+		subq.w	#1,d6
+		move.w	d6,d7
+.write_loop
+		move.w	(a4)+,d0						* x
+		move.w	(a4)+,d1						* y
+		move.w	#SPACECUT_DEPTH,d2
+		bsr		spacecut_project_point
+		move.w	d0,(a0)+
+		move.w	d1,(a0)+
+		dbf		d7,.write_loop
+		bra.s	.done_frame
+
+.no_poly
+		move.w	#0,(a1)
+
+.done_frame
+		move.w	-2(a3),d7						* restore frame index
+		add.l	#40,sp
+		add.l	#SPACECUT_FRAME_SIZE,a1
+		move.l	a1,a0
+
+		addq.w	#1,d7
+		cmp.w	#CUBE_FRAMES,d7
+		blt		.frame_loop
+		rts
+
+* Adds point (d0=x, d1=y) if unique and space available
+spacecut_add_point:
+		move.w	(a3),d2							* count
+		cmp.w	#SPACECUT_MAX_POINTS,d2
+		bge.s	.add_done
+
+		move.w	d2,d3
+		subq.w	#1,d3
+		blt.s	.add_store
+		move.l	a3,a5
+		lea.l	2(a5),a5
+.add_check
+		move.w	(a5)+,d4
+		move.w	(a5)+,d5
+		cmp.w	d0,d4
+		bne.s	.add_next
+		cmp.w	d1,d5
+		beq.s	.add_done
+.add_next
+		dbf		d3,.add_check
+
+.add_store
+		move.w	d0,(a4)+
+		move.w	d1,(a4)+
+		addq.w	#1,(a3)
+
+.add_done
+		rts
+
+* Sort points in temp buffer by angle around center
+spacecut_sort_points:
+		move.w	(a3),d7
+		cmp.w	#2,d7
+		ble	.sort_done
+
+		lea.l	2(a3),a4
+		moveq	#0,d0
+		moveq	#0,d1
+		move.w	d7,d6
+		subq.w	#1,d6
+.sum_loop
+		move.w	(a4)+,d2
+		ext.l	d2
+		add.l	d2,d0
+		move.w	(a4)+,d2
+		ext.l	d2
+		add.l	d2,d1
+		dbf		d6,.sum_loop
+
+		move.l	d0,d2
+		divs	d7,d2
+		move.w	d2,d4							* cx
+		move.l	d1,d2
+		divs	d7,d2
+		move.w	d2,d5							* cy
+
+		move.w	d7,d6
+		subq.w	#1,d6
+.outer
+		move.w	d6,d0
+		lea.l	2(a3),a4
+.inner
+		move.w	d0,-(sp)
+
+		move.w	(a4),d1						* px
+		move.w	2(a4),d2					* py
+		move.w	4(a4),d3					* qx
+		move.w	6(a4),d7					* qy
+
+		sub.w	d4,d1						* dx1
+		sub.w	d5,d2						* dy1
+		sub.w	d4,d3						* dx2
+		sub.w	d5,d7						* dy2
+
+		* p upper half?
+		moveq	#0,d0
+		tst.w	d2
+		bgt.s	.p_upper
+		bne.s	.p_done
+		tst.w	d1
+		blt.s	.p_done
+.p_upper
+		moveq	#1,d0
+.p_done
+
+		* q upper half?
+		tst.w	d7
+		bgt.s	.q_upper
+		bne.s	.q_lower
+		tst.w	d3
+		blt.s	.q_lower
+.q_upper
+		moveq	#1,d7
+		bra.s	.q_done
+.q_lower
+		moveq	#0,d7
+.q_done
+
+		cmp.w	d0,d7
+		beq.s	.same_half
+		bgt.s	.do_swap
+		bra.s	.keep_order
+
+.same_half
+		move.w	6(a4),d7
+		sub.w	d5,d7						* dy2
+		move.w	d1,d0
+		muls	d7,d0							* dx1*dy2
+		move.w	d2,d7
+		muls	d3,d7							* dy1*dx2
+		sub.l	d7,d0
+		bgt.s	.keep_order
+		blt.s	.do_swap
+
+.keep_order
+		move.w	(sp)+,d0
+		addq.l	#4,a4
+		dbf		d0,.inner
+		dbf		d6,.outer
+		bra.s	.sort_done
+
+.do_swap
+		move.w	(a4),d1
+		move.w	2(a4),d2
+		move.w	4(a4),(a4)
+		move.w	6(a4),2(a4)
+		move.w	d1,4(a4)
+		move.w	d2,6(a4)
+		move.w	(sp)+,d0
+		addq.l	#4,a4
+		dbf		d0,.inner
+		dbf		d6,.outer
+
+.sort_done
+		rts
+
+spacecut_project_point:
+		move.w	d2,d6
+		add.w	#CHESS_DIST,d6
+
+		move.l	d0,d3
+		ext.l	d3
+		move.w	#CHESS_FOCAL,d4
+		muls	d4,d3
+		divs.w	d6,d3
+		move.w	#CHESS_CENTERX,d0
+		add.w	d3,d0
+
+		move.l	d1,d3
+		ext.l	d3
+		move.w	#CHESS_FOCAL,d4
+		muls	d4,d3
+		divs.w	d6,d3
+		move.w	#CHESS_CENTERY,d1
+		add.w	d3,d1
+		rts
+
+* Clip polygon in screen coords to Y window [d0..d1], inclusive.
+* in: a0 = input poly (count, x/y pairs)
+*     a1 = output poly buffer
+*     d0.w = ymin
+*     d1.w = ymax
+* out: output poly in a1 (count, points)
+spacecut_clip_ywindow:
+		suba.l	#40,sp							* temp poly (count + points)
+		move.l	sp,a2							* temp buffer
+
+		move.l	a2,a1
+		bsr		spacecut_clip_ymin
+
+		move.l	a2,a0
+		move.w	d1,d0							* ymax -> d0 for clip_ymax
+		bsr		spacecut_clip_ymax
+
+		add.l	#40,sp
+		rts
+
+* Clip polygon to y >= d0
+* in: a3 = input poly (count + points)
+*     a4 = output poly buffer
+spacecut_clip_ymin:
+		move.w	(a0)+,d7						* in count
+		clr.w	(a1)							* out count
+		lea.l	2(a1),a2						* out ptr
+		tst.w	d7
+		beq	.clip_ymin_done
+
+		lea.l	0(a0),a3						* points start
+		move.w	d7,d5
+		subq.w	#1,d5
+		mulu	#4,d5
+		lea.l	(a3,d5.w),a4					* last point
+		move.w	(a4),d1							* prevx
+		move.w	2(a4),d2						* prevy
+
+		move.w	d7,d5
+		subq.w	#1,d5
+.ymin_loop
+		move.w	(a3)+,d3						* curx
+		move.w	(a3)+,d4						* cury
+
+		moveq	#0,d6							* prev_in
+		cmp.w	d0,d2
+		blt	.prev_out
+		moveq	#1,d6
+.prev_out
+		moveq	#0,d7							* cur_in
+		cmp.w	d0,d4
+		blt	.cur_out
+		moveq	#1,d7
+.cur_out
+
+		cmp.w	d6,d7
+		beq	.ymin_same_side
+
+		tst.w	d6								* prev_in?
+		bne	.ymin_in_to_out
+
+.ymin_out_to_in
+		* compute intersection at y = ymin (d0)
+		move.w	d4,d7
+		sub.w	d2,d7							* dy
+		beq	.ymin_advance
+		move.w	d0,d6
+		sub.w	d2,d6							* ymin - prevy
+		ext.l	d6
+		asl.l	#8,d6
+		divs	d7,d6							* t in d6.w
+
+		move.w	d3,d7
+		sub.w	d1,d7							* dx
+		muls	d6,d7
+		asr.l	#8,d7
+		add.w	d1,d7							* xint in d7
+
+		move.w	d7,(a2)+
+		move.w	d0,(a2)+
+		addq.w	#1,(a1)
+		move.w	d3,(a2)+
+		move.w	d4,(a2)+
+		addq.w	#1,(a1)
+		bra	.ymin_advance
+
+.ymin_in_to_out
+		* compute intersection at y = ymin (d0)
+		move.w	d4,d7
+		sub.w	d2,d7							* dy
+		beq	.ymin_advance
+		move.w	d0,d6
+		sub.w	d2,d6							* ymin - prevy
+		ext.l	d6
+		asl.l	#8,d6
+		divs	d7,d6							* t in d6.w
+
+		move.w	d3,d7
+		sub.w	d1,d7							* dx
+		muls	d6,d7
+		asr.l	#8,d7
+		add.w	d1,d7							* xint in d7
+
+		move.w	d7,(a2)+
+		move.w	d0,(a2)+
+		addq.w	#1,(a1)
+		bra	.ymin_advance
+
+.ymin_same_side
+		tst.w	d6								* prev_in?
+		beq.s	.ymin_advance
+		move.w	d3,(a2)+
+		move.w	d4,(a2)+
+		addq.w	#1,(a1)
+
+.ymin_advance
+		move.w	d3,d1							* prevx = curx
+		move.w	d4,d2							* prevy = cury
+		dbf		d5,.ymin_loop
+
+.clip_ymin_done
+		rts
+
+* Clip polygon to y <= d0
+* in: a0 = input poly (count + points)
+*     a1 = output poly buffer
+spacecut_clip_ymax:
+		move.w	(a0)+,d7						* in count
+		clr.w	(a1)							* out count
+		lea.l	2(a1),a2						* out ptr
+		tst.w	d7
+		beq	.clip_ymax_done
+
+		lea.l	0(a0),a3						* points start
+		move.w	d7,d5
+		subq.w	#1,d5
+		mulu	#4,d5
+		lea.l	(a3,d5.w),a4					* last point
+		move.w	(a4),d1							* prevx
+		move.w	2(a4),d2						* prevy
+
+		move.w	d7,d5
+		subq.w	#1,d5
+.ymax_loop
+		move.w	(a3)+,d3						* curx
+		move.w	(a3)+,d4						* cury
+
+		moveq	#0,d6							* prev_in
+		cmp.w	d0,d2
+		bgt.s	.prev_out2
+		moveq	#1,d6
+.prev_out2
+		moveq	#0,d7							* cur_in
+		cmp.w	d0,d4
+		bgt.s	.cur_out2
+		moveq	#1,d7
+.cur_out2
+
+		cmp.w	d6,d7
+		beq.s	.ymax_same_side
+
+		tst.w	d6								* prev_in?
+		bne.s	.ymax_in_to_out
+
+.ymax_out_to_in
+		* compute intersection at y = ymax (d0)
+		move.w	d4,d7
+		sub.w	d2,d7							* dy
+		beq.s	.ymax_advance
+		move.w	d0,d6
+		sub.w	d2,d6							* ymax - prevy
+		ext.l	d6
+		asl.l	#8,d6
+		divs	d7,d6							* t in d6.w
+
+		move.w	d3,d7
+		sub.w	d1,d7							* dx
+		muls	d6,d7
+		asr.l	#8,d7
+		add.w	d1,d7							* xint in d7
+
+		move.w	d7,(a2)+
+		move.w	d0,(a2)+
+		addq.w	#1,(a1)
+		move.w	d3,(a2)+
+		move.w	d4,(a2)+
+		addq.w	#1,(a1)
+		bra.s	.ymax_advance
+
+.ymax_in_to_out
+		* compute intersection at y = ymax (d0)
+		move.w	d4,d7
+		sub.w	d2,d7							* dy
+		beq.s	.ymax_advance
+		move.w	d0,d6
+		sub.w	d2,d6							* ymax - prevy
+		ext.l	d6
+		asl.l	#8,d6
+		divs	d7,d6							* t in d6.w
+
+		move.w	d3,d7
+		sub.w	d1,d7							* dx
+		muls	d6,d7
+		asr.l	#8,d7
+		add.w	d1,d7							* xint in d7
+
+		move.w	d7,(a2)+
+		move.w	d0,(a2)+
+		addq.w	#1,(a1)
+		bra.s	.ymax_advance
+
+.ymax_same_side
+		tst.w	d6								* prev_in?
+		beq.s	.ymax_advance
+		move.w	d3,(a2)+
+		move.w	d4,(a2)+
+		addq.w	#1,(a1)
+
+.ymax_advance
+		move.w	d3,d1							* prevx = curx
+		move.w	d4,d2							* prevy = cury
+		dbf		d5,.ymax_loop
+
+.clip_ymax_done
+		rts
+
+* Draw filled polygon in screen coords into 1bpp buffer.
+* in: a0 = poly (count + points)
+*     a1 = buffer start
+*     d4.w = bytes per row
+*     d5.w = height (lines)
+*     a6 = custom base
+spacecut_draw_polygon:
+		move.w	(a0)+,d7						* count
+		cmp.w	#3,d7
+		blt	.draw_done
+
+		* draw edges
+		lea.l	(a0),a2							* points start
+		move.w	d7,d6
+		subq.w	#1,d6
+		mulu	#4,d6
+		lea.l	(a2,d6.w),a3					* last point
+		move.w	(a3),d0							* x0
+		move.w	2(a3),d1						* y0
+
+		move.w	d7,d6
+		subq.w	#1,d6
+.edge_loop
+		move.w	(a2)+,d2						* x1
+		move.w	(a2)+,d3						* y1
+		movem.l	d0-d3/a0,-(sp)
+		WAIT_BLIT
+		move.l	a1,a0
+		bsr		cubism_drawedgeline
+		movem.l	(sp)+,d0-d3/a0
+		move.w	d2,d0
+		move.w	d3,d1
+		dbf		d6,.edge_loop
+
+		* fill in-place
+		WAIT_BLIT
+		move.l	#-1,bltafwm(a6)
+		move.l	#$09f00012,bltcon0(a6)
+		move.w	#0,bltamod(a6)
+		move.w	#0,bltdmod(a6)
+		move.w	d4,d0
+		lsr.w	#1,d0							* width in words
+		move.w	d5,d1
+		lsl.w	#6,d1
+		or.w	d0,d1							* bltsize
+		move.l	a1,a0
+		move.w	d5,d2
+		mulu	d4,d2
+		lea.l	-2(a0,d2.w),a0					* end ptr
+		move.l	a0,bltapt(a6)
+		move.l	a0,bltdpt(a6)
+		move.w	d1,bltsize(a6)
+
+.draw_done
+		rts
+
+SpacecutEdges:
+		dc.w	0,1, 0,2, 0,4
+		dc.w	1,3, 1,5
+		dc.w	2,3, 2,6
+		dc.w	3,7
+		dc.w	4,5, 4,6
+		dc.w	5,7
+		dc.w	6,7
+
+chess_project_point:
+		move.w	d2,d6
+		add.w	#CHESS_DIST,d6
+
+		move.l	d0,d3
+		ext.l	d3
+		move.w	#CHESS_FOCAL,d4
+		muls	d4,d3
+		divs.w	d6,d3
+		move.w	#CHESS_CENTERX,d0
+		add.w	d3,d0
+
+		move.l	d1,d3
+		ext.l	d3
+		move.w	#CHESS_FOCAL,d4
+		muls	d4,d3
+		divs.w	d6,d3
+		move.w	#CHESS_CENTERY,d1
+		add.w	d3,d1
+		rts
+
 ;----------------------------------------------------------------------------------
 ; Draw blitter edge line for blitter area fill
 ;
@@ -1137,7 +2020,7 @@ Script:	dc.l	0,0
 cubism_spiral: incbin "./assets/spiralbuffer.raw"
 
 cubism_maincopper:
-		dc.l	$008e2cc1,$00902c81				;window start,window stop,
+		dc.l	$008e2cc0,$00902c81				;window start,window stop,
 		dc.l	$00920050,$009400a8				;bitplane start,bitplane stop
 		dc.l	$01060c00,$01fc0000				;fixes the aga modulo problem
 		dc.l	$0108001a,$010a001a				;modulo odd planes,modulo even planes
@@ -1147,14 +2030,17 @@ cubism_maincopper:
 
 cubism_vars: dc.l $deadcafe
 
-		rsreset
-cubism_drawbuffer: 	rs.l 1
-cubism_frontbuffer: rs.l 1
-cubism_frontcopper: rs.l 1
-cubism_backbuffer: 	rs.l 1
-cubism_backcopper: 	rs.l 1
-cubism_noiseptr: 	rs.l 1
-cubism_coppreamble: 	rs.l 1
-cubism_copseglen:	rs.l 1
-cubism_vars_SIZEOF: so
+						rsreset
 
+cubism_spacecutpoly: 	rs.l 1
+cubism_altbuffer: 		rs.l 1
+cubism_drawbuffer: 		rs.l 1
+cubism_frontbuffer: 	rs.l 1
+cubism_frontcopper: 	rs.l 1
+cubism_backbuffer: 		rs.l 1
+cubism_backcopper: 		rs.l 1
+cubism_noiseptr: 		rs.l 1
+cubism_chesslines: 		rs.l 1
+cubism_coppreamble: 	rs.l 1
+cubism_copseglen:		rs.l 1
+cubism_vars_SIZEOF: 	so
