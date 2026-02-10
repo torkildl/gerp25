@@ -1,4 +1,4 @@
-CUBISM_BPLWIDTH = (192*2)+16
+CUBISM_BPLWIDTH = (192*2)  
 CUBISM_BPLHEIGHT = 192
 CUBISM_BPLSIZE = ((CUBISM_BPLWIDTH/8)*CUBISM_BPLHEIGHT)
 CUBISM_BPLDEPTH = 4
@@ -19,7 +19,7 @@ CUBISM_STARTLINE = $3fb7fffe					* plan is to start showing stuff at line $4c = 
 CUBISM_START_Y = $3f	
 CUBISM_SEGMENTHEIGHT = 32
 CUBISM_BACKCOL = $423
-HRIGHT = $c1
+HRIGHT = $bf
 HLEFT = $5f
 
 * Offset to current segment list
@@ -34,6 +34,8 @@ CUBISM_ANIM_SWITCH = 4
 CUBISM_ANIM_STAY = 1
 CUBISM_ANIM_MOVEOUT = 3
 CUBISM_ANIM_RESTART = 5
+CUBISM_ANIM_MOVEOUT_R = 6
+CUBISM_ANIM_MOVEIN_R = 7
 
 CUBISM_SPIRAL_YSPD = 3
 
@@ -401,6 +403,9 @@ cubism_newdraw:
 		move.l	cubism_backbuffer(a5),a2
 		move.l	#(CUBISM_BPLSIZE*2)-(CUBISM_DRAWSKIP/8),d0
 		lea.l	-2(a2,d0.w),a2
+
+		sub.l	#(CUBISM_BPLWIDTH/8)/2,a2
+
 		moveq	#0,d0
 		move.w	#CUBISM_DRAWSKIP/8,d1
 
@@ -745,15 +750,45 @@ cubism_noisesegment:
 		move.w	(a5,d4.w),74(a0)				* color 7
 		rts
 
-
-
+CUBISM_MAXXPOS = CUBISM_BPLWIDTH
+CUBISM_XPOSTABLEN = 4*CUBISM_MAXXPOS
 cubism_initanimation:
-		* prepare table of xpositions,with byte offsets and scroll registers for moving in and moving out
+		* TODO: prepare table of xpositions frmo 0 to 383.
+		* each table entry should have a word lenght byte offsets and a word length scroll register value (for bplcon1)
+
+		move.l	cubism_vars,a5
+		ALLOC_PUBLIC CUBISM_XPOSTABLEN,cubism_xpostable(a5)
+		move.l	cubism_xpostable(a5),a0
+		move.l	a0,a1
+		* current xpos
+		moveq	#0,d0
+.newxpos
+		move.w	d0,d1	* current xpos
+
+		* convert pixels to coarse byte offset + fine scroll
+		move.w	d1,d4
+		lsr.w	#4,d4							*	get bytes from pixels
+		add.w	d4,d4							* word align ** now offset to be added to bplptrs
+
+		and.w	#$f,d1							* the scroll value
+
+		move.w	d1,d2							* copy scroll reg value
+		lsl.l	#4,d1							* move 4 bits higher for next playfield
+		or.w	d1,d2							* combine playfields scroll register input
+.noscroll
+		move.w	d4,(a0)+						* set byteoffset (word aligned) for bplptrs
+		move.w	d2,(a0)+						* set value for scroll register
+
+		addq	#1,d0
+		cmp.w	#CUBISM_MAXXPOS,d0
+		blt		.newxpos
+		nop
+
+		* old code
 		lea.l	cubism_moving_pattern,a1
 		lea.l	cubism_sine256,a2
-		move.w	#$40,d7							* $40 values
-		moveq	#0,d0							* start with zero
-		move.w	#$80,d3							* maximum is $80
+		move.w	#$7f,d7							* 128 values
+		move.w	#$7e,d0							* +2 below lands on sine index $80 (left edge)
 .newpos
 		add.w	#2,d0
 		move.w	(a2,d0.w),d1
@@ -794,55 +829,82 @@ cubism_animate:									* animate the cube and its segments
 		bra		.nonewcmd
 .notdonewaiting
 		move.w	CUBISM_SEG_STATE(a1),d0
-		* are we moving out?
-		cmp.w	#CUBISM_ANIM_MOVEOUT,d0
-		bne.s	.notmovingout
-		sub.w	#2,CUBISM_SEG_XPOS(a1)			* prev word in the move table
-		cmp.w	#$00,CUBISM_SEG_XPOS(a1)
+	* are we moving out?
+	cmp.w	#CUBISM_ANIM_MOVEOUT,d0
+	bne.s	.notmovingout
+	sub.w	#2,CUBISM_SEG_XPOS(a1)			* prev word in the move table
+	cmp.w	#$00,CUBISM_SEG_XPOS(a1)
 		bpl.w	.nonewcmd
 		move.w	#CUBISM_ANIM_STAY,CUBISM_SEG_STATE(a1)
 		bsr		cubism_nextanimstep
-		move.w	#$0,CUBISM_SEG_XPOS(a1)
-		bra		.nonewcmd
+	move.w	#$0,CUBISM_SEG_XPOS(a1)
+	bra		.nonewcmd
 .notmovingout
-		* are we moving in?
-		cmp.w	#CUBISM_ANIM_MOVEIN,d0
-		bne.s	.notmovingin
-		add.w	#2,CUBISM_SEG_XPOS(a1)
-		cmp.w	#$7e,CUBISM_SEG_XPOS(a1)		* $80 -2 = 126
+	* are we moving out to the right?
+	cmp.w	#CUBISM_ANIM_MOVEOUT_R,d0
+	bne.s	.notmovingout_r
+	add.w	#2,CUBISM_SEG_XPOS(a1)
+	cmp.w	#$fe,CUBISM_SEG_XPOS(a1)		* max index in table
+	ble.w	.nonewcmd
+	move.w	#CUBISM_ANIM_STAY,CUBISM_SEG_STATE(a1)
+	bsr		cubism_nextanimstep
+	move.w	#$fe,CUBISM_SEG_XPOS(a1)
+	bra		.nonewcmd
+.notmovingout_r
+	* are we moving in from the right?
+	cmp.w	#CUBISM_ANIM_MOVEIN_R,d0
+	bne.s	.notmovingin_r
+	sub.w	#2,CUBISM_SEG_XPOS(a1)
+	cmp.w	#$80,CUBISM_SEG_XPOS(a1)
+	bge.w	.nonewcmd
+	bsr		cubism_nextanimstep
+	move.w	#$80,CUBISM_SEG_XPOS(a1)
+	bra		.nonewcmd
+.notmovingin_r
+	* are we moving in?
+	cmp.w	#CUBISM_ANIM_MOVEIN,d0
+	bne.s	.notmovingin
+	add.w	#2,CUBISM_SEG_XPOS(a1)
+	cmp.w	#$7e,CUBISM_SEG_XPOS(a1)		* $80 -2 = 126
 		blt.w	.nonewcmd
 		bsr		cubism_nextanimstep
 		move.w	#$7e,CUBISM_SEG_XPOS(a1)
 .notmovingin
 .nonewcmd
 
-		* convert current xpos to byteoffset and scroll
-		lea.l	cubism_moving_pattern,a2
-		move.w	CUBISM_SEG_XPOS(a1),d2
-		and.w	#$7e,d2
-		move.w	(a2,d2.w),d4					* xpos in pixels
+	; * convert current xpos to byteoffset and scroll
+	; lea.l	cubism_moving_pattern,a2
+	; move.w	CUBISM_SEG_XPOS(a1),d2
+	; and.w	#$fe,d2
+	; move.w	(a2,d2.w),d4					* xpos in pixels
 
-		move.w	d4,d3							* save xpos for later
+	; * convert pixels to coarse byte offset + fine scroll
+	; move.w	d4,d3							* save xpos for later
 
-		lsr.w	#4,d4							*	get bytes from pixels
-		add.w	d4,d4							* word align ** now offset to be added to bplptrs
-		sub.w	#2,d4
+	; lsr.w	#4,d4							*	get bytes from pixels
+	; add.w	d4,d4							* word align ** now offset to be added to bplptrs
+	; sub.w	#2,d4
 
-		and.w	#$f,d3							* the scroll value
-		move.w	#16,d2
-		sub.w	d3,d2
-		and.w	#$f,d2							* if no bits are set,we don't need to scroll
-		tst.w	d2								* do we scroll?
-		beq.s	.noscroll
+	; and.w	#$f,d3							* the scroll value
+	; move.w	#16,d2
+	; sub.w	d3,d2
+	; and.w	#$f,d2							* if no bits are set,we don't need to scroll
+	; tst.w	d2								* do we scroll?
+	; beq.s	.noscroll
 
-		move.w	d2,d3							* copy scroll reg value
-		lsl.l	#4,d3							* move 4 bits higher for next playfield
-		or.w	d3,d2							* combine playfields scroll register input
-		addq	#2,d4							* subtract two bytes (one word) from bplptrs,for scrolling right
+	; move.w	d2,d3							* copy scroll reg value
+	; lsl.l	#4,d3							* move 4 bits higher for next playfield
+	; or.w	d3,d2							* combine playfields scroll register input
+	; addq	#2,d4							* subtract two bytes (one word) from bplptrs,for scrolling right
 
-.noscroll
-		move.w	d4,CUBISM_SEG_BYTEOFFSET(a1)	* set byteoffset (word aligned) for bplptrs
-		move.w	d2,CUBISM_SEG_SCROLLREG(a1)		* set value for scroll register
+	move.l	cubism_vars,a5
+	move.l	cubism_xpostable(a5),a5
+	move.w	256*4(a5),CUBISM_SEG_BYTEOFFSET(a1)
+	move.w	2+256*4(a5),CUBISM_SEG_SCROLLREG(a1)
+
+; .noscroll
+; 	move.w	d4,CUBISM_SEG_BYTEOFFSET(a1)	* set byteoffset (word aligned) for bplptrs
+; 	move.w	d2,CUBISM_SEG_SCROLLREG(a1)		* set value for scroll register
 
 .finito
 		adda.l	#16,a1							* move to next segment
@@ -904,20 +966,34 @@ cubism_nextanimstep:
 		move.l	a3,(a2,d5.w)					* save animation script pointer
 		rts
 .nostay
-		cmp.w	#CUBISM_ANIM_MOVEIN,d4
-		bne.s	.notmovingin
-		move.w	d4,CUBISM_SEG_STATE(a1)
-		move.w	(a3)+,CUBISM_SEG_WAIT(a1)
-		move.l	a3,(a2,d5.w)					* save animation script pointer
-		rts
+	cmp.w	#CUBISM_ANIM_MOVEIN,d4
+	bne.s	.notmovingin
+	move.w	d4,CUBISM_SEG_STATE(a1)
+	move.w	(a3)+,CUBISM_SEG_WAIT(a1)
+	move.l	a3,(a2,d5.w)					* save animation script pointer
+	rts
 .notmovingin
-		cmp.w	#CUBISM_ANIM_MOVEOUT,d4
-		bne.s	.notmovingout
-		move.w	d4,CUBISM_SEG_STATE(a1)
-		move.w	(a3)+,CUBISM_SEG_WAIT(a1)
+	cmp.w	#CUBISM_ANIM_MOVEOUT,d4
+	bne.s	.notmovingout
+	move.w	d4,CUBISM_SEG_STATE(a1)
+	move.w	(a3)+,CUBISM_SEG_WAIT(a1)
 .notmovingout
-		move.l	a3,(a2,d5.w)					* save animation script pointer
-		rts
+	cmp.w	#CUBISM_ANIM_MOVEIN_R,d4
+	bne.s	.notmovingin_r
+	move.w	d4,CUBISM_SEG_STATE(a1)
+	move.w	#$fe,CUBISM_SEG_XPOS(a1)		* start at rightmost
+	move.w	(a3)+,CUBISM_SEG_WAIT(a1)
+	move.l	a3,(a2,d5.w)					* save animation script pointer
+	rts
+.notmovingin_r
+	cmp.w	#CUBISM_ANIM_MOVEOUT_R,d4
+	bne.s	.notmovingout_r
+	move.w	d4,CUBISM_SEG_STATE(a1)
+	move.w	#$80,CUBISM_SEG_XPOS(a1)		* start at center for right-half move out
+	move.w	(a3)+,CUBISM_SEG_WAIT(a1)
+.notmovingout_r
+	move.l	a3,(a2,d5.w)					* save animation script pointer
+	rts
 
 cubism_clearscreen:
 		move.l	cubism_vars,a5
@@ -2020,10 +2096,10 @@ Script:	dc.l	0,0
 cubism_spiral: incbin "./assets/spiralbuffer.raw"
 
 cubism_maincopper:
-		dc.l	$008e2cc0,$00902c81				;window start,window stop,
-		dc.l	$00920050,$009400a8				;bitplane start,bitplane stop
+		dc.l	$008e2cc0,$00902c80			;window start,window stop,
+		dc.l	$00920058,$009400b8				;bitplane start,bitplane stop
 		dc.l	$01060c00,$01fc0000				;fixes the aga modulo problem
-		dc.l	$0108001a,$010a001a				;modulo odd planes,modulo even planes
+		dc.l	$01080016,$010a0016				;modulo odd planes,modulo even planes
 		dc.l	$01000200,$01800000+CUBISM_BACKCOL
 		dc.w	$008a,$0000						* copjmp2
 		dc.l	$fffffffe
@@ -2043,4 +2119,5 @@ cubism_noiseptr: 		rs.l 1
 cubism_chesslines: 		rs.l 1
 cubism_coppreamble: 	rs.l 1
 cubism_copseglen:		rs.l 1
+cubism_xpostable:		rs.l 1
 cubism_vars_SIZEOF: 	so
