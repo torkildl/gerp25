@@ -1,3 +1,6 @@
+* TODO: Add copperwaits on top of the screen above the effect. Should be of the same type as over segments
+
+
 CUBISM_BPLWIDTH = (192*2)  
 CUBISM_BPLHEIGHT = 192
 CUBISM_BPLSIZE = ((CUBISM_BPLWIDTH/8)*CUBISM_BPLHEIGHT)
@@ -14,8 +17,8 @@ CUBISM_DRAWSKIP = CUBISM_BPLWIDTH-CUBISM_DRAWWIDTH
 
 CUBISM_SEGBPLSIZE = CUBISM_BPLWIDTH*CUBISM_SEGMENTHEIGHT/8
 CUBISM_SEGMENTS = 6
-*CUBISM_STARTLINE = $3fae						* plan is to start showing stuff at line $4c = 78
-CUBISM_STARTLINE = $3fb7fffe					* plan is to start showing stuff at line $4c = 78
+*CUBISM_STARTLINE = $3fb7fffe					* plan is to start showing stuff at line $4c = 78
+CUBISM_STARTLINE = $3fbffffe					* plan is to start showing stuff at line $4c = 78
 CUBISM_START_Y = $3f	
 CUBISM_SEGMENTHEIGHT = 32
 CUBISM_BACKCOL = $423
@@ -123,6 +126,10 @@ Cubism_Precalc:
 
 		* frontbuffer/backbuffer bplptrs are set per-segment below
 
+		move.l	#$01800000,(a0)+
+		move.l	#$01800000,(a1)+
+
+
 		move.l	a0,d0
 		sub.l	a3,d0				* offset for segments in copperlist
 		move.l	d0,cubism_coppreamble(a5)
@@ -203,6 +210,16 @@ y set y+1
 		move.l	d1,cubism_copseglen(a5)
 		move.l	#$01000200,(a0)+
 		move.l	#$01000200,(a1)+
+
+		move.b	#y&$ff,(a0)+		* HRIGHT WAIT
+		move.b	#y&$ff,(a1)+
+		move.b	#HRIGHT,(a0)+
+		move.b	#HRIGHT,(a1)+
+		move.w	#$fffe,(a0)+
+		move.w	#$fffe,(a1)+
+		move.l	#$01800000,(a0)+
+		move.l	#$01800000,(a1)+
+
 		* end copperlists
 		move.l	#-2,(a0)
 		move.l	#-2,(a1)
@@ -314,8 +331,8 @@ cubism_updateframe:
 
 		rts
 
-CLEARLINES = 192+64
-
+CLEARLINES = 192
+CLEARLINES_CPU = (CUBISM_BPLHEIGHT*2)-CLEARLINES
 cubism_newdraw:
 		* simple blitter clear
 		lea.l	custom,a6
@@ -341,7 +358,7 @@ cubism_newdraw:
 		sub.l	a2,a2
 		sub.l	a3,a3
 		sub.l	a4,a4
-		rept	64
+		rept	CLEARLINES_CPU
 		movem.l	d0-d7/a1-a4,-(a0)
 		endr		
 		* find right set of coords
@@ -425,6 +442,8 @@ cubism_emptysegment:
 		rts
 
 cubism_glenzsegment:
+		* DRAW BACKSIDE OF THIS SEGMENT ON TWO PLANES (EXTRABUFFER NUM X)
+
 		* d1 = current bplptr for first bitplane
 		move.w	#$4200,10(a0)					* after wait, col0, and $0100 (4 bpls)
 		move.w	d2,14(a0)						* bplcon1
@@ -1893,6 +1912,11 @@ chess_project_point:
 		add.w	d3,d1
 		rts
 
+
+* TODO: A routine or macro that takes d0/d1 as x1/y1 and d2/d3 as x2/y2, d4 and d5 as upper and lower clipping borders,
+* and returns a clipped line with start and end both inside the clipping window.
+
+
 ;----------------------------------------------------------------------------------
 ; Draw blitter edge line for blitter area fill
 ;
@@ -2037,11 +2061,11 @@ cubism_animation_starts:
 
 cubism_segment_types: 
 		*		dc.l cubism_gold_glenzsegment
+		dc.l	cubism_granny_blenksegment
 		dc.l	cubism_codersegment
 		dc.l	cubism_spiralsegment
 		dc.l	cubism_emptysegment
 		dc.l	cubism_noisesegment
-		dc.l	cubism_granny_blenksegment
 		dc.l	cubism_purple_glenzsegment
 		dc.l	cubism_crayola_blenksegment
 		dc.l	cubism_gold_blenksegment
@@ -2107,7 +2131,6 @@ cubism_maincopper:
 cubism_vars: dc.l $deadcafe
 
 						rsreset
-
 cubism_spacecutpoly: 	rs.l 1
 cubism_altbuffer: 		rs.l 1
 cubism_drawbuffer: 		rs.l 1
@@ -2121,3 +2144,11 @@ cubism_coppreamble: 	rs.l 1
 cubism_copseglen:		rs.l 1
 cubism_xpostable:		rs.l 1
 cubism_vars_SIZEOF: 	so
+
+
+; 						rsreset
+; CUBISM_SEG_ROUTINE		rs.l	1
+; CUBISM_SEG_XPOS			rs.w	1
+; CUBISM_SEG_STATE		rs.w	1
+; CUBISM_SEG_WAIT			rs.w	1
+; cubism_segment_SIZEOF:	so
